@@ -1,0 +1,76 @@
+{
+  "benchmark_name": "libero-rsi-bench",
+  "version": "1.1.0",
+  "simulator": "MuJoCo 2.3.7 + robosuite 1.4.1 (sylvestf/LIBERO-plus drop-in)",
+  "control_hz": 20,
+  "action_dim": 7,
+  "state_dim": 8,
+  "tasks": {
+    "spatial_t0": {
+      "suite": "libero_spatial",
+      "task_id": 0,
+      "clean_base_name": "pick_up_the_black_bowl_between_the_plate_and_the_ramekin_and_place_it_on_the_plate",
+      "instruction": "pick up the black bowl between the plate and the ramekin and place it on the plate",
+      "task_type": "pick_place",
+      "native_steps": 220,
+      "standard_steps": 220,
+      "extended_steps": 450,
+      "max_macro_turns": 15,
+      "hold_success_steps": 1
+    },
+    "object_t0": {
+      "suite": "libero_object",
+      "task_id": 0,
+      "clean_base_name": "pick_up_the_alphabet_soup_and_place_it_in_the_basket",
+      "instruction": "pick up the alphabet soup and place it in the basket",
+      "task_type": "pick_place",
+      "native_steps": 280,
+      "standard_steps": 280,
+      "extended_steps": 450,
+      "max_macro_turns": 15,
+      "hold_success_steps": 1
+    },
+    "goal_t0": {
+      "suite": "libero_goal",
+      "task_id": 0,
+      "clean_base_name": "open_the_middle_drawer_of_the_cabinet",
+      "instruction": "open the middle drawer of the cabinet",
+      "task_type": "articulated_drawer",
+      "native_steps": 300,
+      "standard_steps": 300,
+      "extended_steps": 450,
+      "max_macro_turns": 15,
+      "hold_success_steps": 1
+    },
+    "long_t0": {
+      "suite": "libero_10",
+      "task_id": 5,
+      "clean_base_name": "LIVING_ROOM_SCENE2_put_both_the_alphabet_soup_and_the_tomato_sauce_in_the_basket",
+      "instruction": "put both the alphabet soup and the tomato sauce in the basket",
+      "task_type": "multi_stage_pick_place",
+      "native_steps": 520,
+      "standard_steps": 520,
+      "extended_steps": 750,
+      "max_macro_turns": 25,
+      "hold_success_steps": 1
+    }
+  },
+  "ood_axes": [
+    "objects_layout",
+    "robot_init_state",
+    "language_instruction",
+    "camera_visual"
+  ],
+  "ood_axis_mapping": {
+    "objects_layout": ["Objects Layout"],
+    "robot_init_state": ["Robot Initial States"],
+    "language_instruction": ["Language Instructions"],
+    "camera_visual": ["Camera Viewpoints", "Light Conditions", "Background Textures", "Sensor Noise"]
+  },
+  "ood_levels": [2, 3, 4],
+  "budgets": {
+    "offline_demos_per_task": 50,
+    "low_data_demos_per_task": 20,
+    "online_dev_episodes_total": 2000
+  }
+}

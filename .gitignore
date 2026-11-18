@@ -1,0 +1,24 @@
+# Run artifacts & logs
+runs/*
+!runs/.gitkeep
+
+# Python & caches
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.pytest_cache/
+
+# OS & editor
+.DS_Store
+*.swp
+.vscode/
+
+# Checkpoints, datasets & secrets
+outputs/
+checkpoints/
+datasets/
+*.pt
+*.pth
+*.safetensors
+.env
