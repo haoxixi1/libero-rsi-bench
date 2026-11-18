@@ -9,14 +9,16 @@
 ```text
 libero-rsi-bench/
 ├── docs/
-│   ├── BENCHMARK_SPEC.md          # 统一 Benchmark 规范（任务、切分锁、观测契约、双时间窗、预算规则与统计口径）
-│   └── INTEGRATION_GUIDE.md       # 组员接入规范（obs/action 格式、HTTP Server 解耦、DevInteractionEnv）
+│   ├── BENCHMARK_SPEC.md          # 小组实验基准与评测协议（任务、数据下载、训练预算、评测指标）
+│   ├── INTEGRATION_GUIDE.md       # 组员接入规范（obs/action 格式、HTTP Server 解耦、DevInteractionEnv）
+│   └── videos/                    # 4 个核心任务的真机 MuJoCo 双视角成功演示视频（MP4）
 ├── protocol/
 │   ├── tasks_manifest.json        # 4 核心任务（含 clean_base_name）+ 4 条 LIBERO-Plus OOD 轴 + 预算上限
 │   ├── generate_splits.py         # 确定性切分生成与 SHA-256 锁校验脚本
 │   └── splits.lock.json           # 已锁定切分：burned(8) / dev(100) / sealed_id(100) / sealed_ood(112)
 ├── harness/
 │   ├── math_kinematics.py         # 四元数/轴角/旋转误差转换、SE(3) 像素反投影、确定性高斯噪声
+│   ├── video_recorder.py          # 双视角画面拼接、零依赖 PNG 关键帧编码与 H.264 MP4 录制
 │   ├── budget_tracker.py          # 2,000 回合硬预算守卫、sealed_reads.log 审计、4D 成本账本
 │   ├── policy_protocol.py         # 零依赖跨环境协议（control_mode 协商 / PolicyHTTPServer / Client）
 │   ├── env_adapter.py             # sylvestf/LIBERO-plus 多控制模式实机适配器 + 纯 Python 物理 Mock 仿真器
@@ -25,6 +27,7 @@ libero-rsi-bench/
 │   └── stats_and_report.py        # Wilson 95% CI、精确 McNemar、有限样本功效、Markdown & SVG 报表
 ├── examples/
 │   ├── minimal_policy_server.py   # 任意方法接入 HTTP Policy Server 的最小模板
+│   ├── minimal_code_policy.py     # Code-as-Policies（命令式脚本 + 闭环原语）HTTP 模板
 │   └── minimal_dev_interaction.py # 在预算锁内使用 DevInteractionEnv 的最小模板
 ├── tests/
 │   └── verify_all.py              # 零第三方依赖全链路验证测试套件

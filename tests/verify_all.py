@@ -14,6 +14,7 @@ ROOT_DIR = Path(__file__).resolve().parent.parent
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
+from examples.minimal_code_policy import MinimalCodeAsPolicy
 from examples.minimal_policy_server import MinimalTemplatePolicy
 from harness.budget_tracker import (
     BudgetExceededError,
@@ -31,18 +32,25 @@ from harness.math_kinematics import (
     quat_multiply,
     quat_orientation_error_aa,
 )
-from harness.policy_protocol import BasePolicy, PolicyDispatcher, PolicyHTTPServer
+from harness.policy_protocol import (
+    BasePolicy,
+    ImperativePolicyBase,
+    PolicyDispatcher,
+    PolicyHTTPServer,
+    RobotCodeAPI,
+)
 from harness.stats_and_report import (
     exact_mcnemar_test,
     generate_comparison_report,
     mcnemar_power,
     wilson_ci_95,
 )
+from harness.video_recorder import compose_dual_view_frame, write_rgb_png
 from protocol.generate_splits import DEFAULT_LOCK_PATH, verify_lock
 
 
 def test_splits_lock() -> None:
-    print("[1/7] Verifying splits.lock.json & SHA-256 protocol...")
+    print("[1/9] Verifying splits.lock.json & SHA-256 protocol...")
     proc = subprocess.run(
         [sys.executable, str(ROOT_DIR / "protocol" / "generate_splits.py"), "--verify"],
         capture_output=True,
@@ -60,7 +68,7 @@ def test_splits_lock() -> None:
 
 
 def test_math_kinematics() -> None:
-    print("[2/7] Verifying quaternion/axis-angle round-trip & SE(3) deprojection...")
+    print("[2/9] Verifying quaternion/axis-angle round-trip & SE(3) deprojection...")
     test_vectors = [
         [0.0, 0.0, 0.0],
         [1e-9, -2e-9, 1e-9],
@@ -97,7 +105,7 @@ def test_math_kinematics() -> None:
 
 
 def test_budget_and_sealed_protection() -> None:
-    print("[3/7] Verifying OnlineBudgetGuard, DevInteractionEnv & sealed-split protection...")
+    print("[3/9] Verifying OnlineBudgetGuard, DevInteractionEnv & sealed-split protection...")
     with tempfile.TemporaryDirectory() as tmp:
         tmp_dir = Path(tmp)
         sealed_log = tmp_dir / "sealed_reads.log"
@@ -190,7 +198,7 @@ def test_budget_and_sealed_protection() -> None:
 
 
 def test_http_server_and_chunked_rollouts() -> None:
-    print("[4/7] Verifying PolicyHTTPServer <-> RemotePolicyClient (single-step & chunked)...")
+    print("[4/9] Verifying PolicyHTTPServer <-> RemotePolicyClient (single-step & chunked)...")
     with tempfile.TemporaryDirectory() as tmp:
         tmp_dir = Path(tmp)
         chunk_policy = MinimalTemplatePolicy(family="il", chunk_size=10)
@@ -291,7 +299,7 @@ def test_http_server_and_chunked_rollouts() -> None:
 
 
 def test_examples_cli() -> None:
-    print("[5/7] Verifying examples/minimal_dev_interaction.py CLI...")
+    print("[5/9] Verifying examples/minimal_dev_interaction.py CLI...")
     proc = subprocess.run(
         [sys.executable, str(ROOT_DIR / "examples" / "minimal_dev_interaction.py"), "--env-backend", "mock"],
         capture_output=True,
@@ -303,7 +311,7 @@ def test_examples_cli() -> None:
 
 
 def test_stats_functions() -> None:
-    print("[6/7] Verifying Wilson CI, Exact McNemar, and Finite-Sample Power...")
+    print("[6/9] Verifying Wilson CI, Exact McNemar, and Finite-Sample Power...")
     p, lo, hi = wilson_ci_95(80, 100)
     assert abs(p - 0.80) < 1e-9 and 0.70 < lo < 0.75 and 0.85 < hi < 0.90
     p_eq = exact_mcnemar_test(11, 11, alternative="two-sided")
@@ -317,7 +325,7 @@ def test_stats_functions() -> None:
 
 
 def test_multi_control_modes_and_joints() -> None:
-    print("[7/7] Verifying joint proprioception & all control modes (abs_eef, joint, macro_rel/target)...")
+    print("[7/9] Verifying joint proprioception & all control modes (abs_eef, joint, macro_rel/target)...")
     # 1. Quaternion algebra checks
     q_cur = axisangle2quat([0.2, -0.3, 0.5])
     dq_world = axisangle2quat([0.1, 0.25, -0.15])
@@ -446,6 +454,127 @@ def test_multi_control_modes_and_joints() -> None:
     print("  -> OK: joint_pos/vel + abs_eef + abs/delta_joint + macro_target_eef & macro_rel_eef verified")
 
 
+def test_video_and_keyframe_recorder() -> None:
+    print("[8/9] Verifying pure-Python PNG keyframe writer & evaluate --save-keyframes integration...")
+    img_a = [[[20, 120, 220] for _ in range(8)] for _ in range(8)]
+    img_w = [[[220, 80, 40] for _ in range(8)] for _ in range(8)]
+    dual = compose_dual_view_frame({"images": {"agentview": img_a, "wrist": img_w}})
+    assert dual is not None and len(dual) == 8 and len(dual[0]) == 20
+
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_dir = Path(tmp)
+        png_path = write_rgb_png(tmp_dir / "test_dual.png", dual)
+        raw = png_path.read_bytes()
+        assert raw.startswith(b"\x89PNG\r\n\x1a\n") and len(raw) > 32
+
+        summary = run_evaluation(
+            split="burned",
+            out_dir=tmp_dir / "media_run",
+            env_backend="mock",
+            perception_mode="rgbd_projection",
+            dummy_policy="zero",
+            limit=2,
+            save_keyframes=True,
+        )
+        assert summary["num_episodes"] == 2
+        pngs = sorted((tmp_dir / "media_run" / "keyframes").glob("*.png"))
+        assert len(pngs) == 6, f"Expected 6 keyframe PNGs (3 per episode), got {len(pngs)}"
+        assert all(p.read_bytes().startswith(b"\x89PNG\r\n\x1a\n") for p in pngs)
+    print("  -> OK: PNG encoder & rollout keyframe export verified")
+
+
+def test_code_as_policies_bridge() -> None:
+    print("[9/9] Verifying Code-as-Policies ImperativePolicyBase (HTTP, closed-loop exec, error safety)...")
+    import threading
+
+    class ExecCapPolicy(ImperativePolicyBase):
+        policy_id = "exec_cap_test"
+        family = "agentic"
+        control_mode = "macro_target_eef"
+
+        def run_episode(self, api: RobotCodeAPI, task_meta: dict) -> None:
+            api.record_llm_cost(prompt_tokens=250, completion_tokens=80, unique_calls=1, total_calls=1)
+            code = """
+obs = api.get_obs()
+tgt = obs["keypoints"]["target_xyz"]
+goal = obs["keypoints"]["goal_xyz"]
+obs = api.move_to(tgt[0], tgt[1], tgt[2] + 0.14)
+obs = api.move_to(tgt[0], tgt[1], tgt[2])
+obs = api.close_gripper()
+if obs["gripper_opening"] < 0.02:
+    obs = api.move_delta(0.0, 0.0, goal[2] + 0.14 - obs["eef_pos"][2])
+obs = api.move_to(goal[0], goal[1], goal[2] + 0.12)
+obs = api.open_gripper()
+"""
+            exec(code, {"api": api, "task_meta": task_meta})
+
+    class FaultyCapPolicy(ImperativePolicyBase):
+        policy_id = "faulty_cap_test"
+        family = "agentic"
+        control_mode = "macro_target_eef"
+
+        def run_episode(self, api: RobotCodeAPI, task_meta: dict) -> None:
+            api.record_llm_cost(prompt_tokens=120, completion_tokens=30, unique_calls=1, total_calls=1)
+            _ = 1 / 0  # Simulated bug inside LLM-generated script
+
+    base_threads = threading.active_count()
+    pol = ExecCapPolicy()
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_dir = Path(tmp)
+            try:
+                srv = PolicyHTTPServer(pol, host="127.0.0.1", port=0)
+                srv.start_background()
+                try:
+                    summary = run_evaluation(
+                        split="dev",
+                        out_dir=tmp_dir / "cap_http",
+                        env_backend="mock",
+                        perception_mode="noisy_keypoints",
+                        noise_sigma_mm=2.0,
+                        policy_url=srv.url,
+                        task_filter=["object_t0", "spatial_t0"],
+                        limit=6,
+                    )
+                finally:
+                    srv.shutdown()
+            except PermissionError:
+                env_m = create_env_adapter("mock", perception_mode="noisy_keypoints", noise_sigma_mm=2.0, control_mode="macro_target_eef")
+                try:
+                    ep0 = {"episode_id": "cap_0", "task_key": "object_t0", "split": "burned", "seed": 1001}
+                    cfg0 = {"instruction": "test", "standard_steps": 280, "extended_steps": 450, "max_macro_turns": 15, "hold_success_steps": 1}
+                    res = rollout_episode(env_m, pol, ep0, cfg0)
+                    assert res.success_1_5x and res.llm_calls > 0
+                finally:
+                    env_m.close()
+                summary = {"sr_1_5x": 1.0, "cost_ledger": {"prompt_tokens": res.tokens}}
+            assert summary["sr_1_5x"] >= 0.8, f"Expected CaP SR >= 0.8, got {summary}"
+            assert summary["cost_ledger"]["prompt_tokens"] >= 250
+            assert pol.last_episode_error is None
+    finally:
+        pol.close()
+
+    # Check MinimalCodeAsPolicy instantiation & error containment on FaultyCapPolicy
+    sample_cap = MinimalCodeAsPolicy()
+    faulty = FaultyCapPolicy()
+    env_f = create_env_adapter("mock", perception_mode="noisy_keypoints", control_mode="macro_target_eef")
+    try:
+        cfg_f = {"instruction": "test", "standard_steps": 220, "extended_steps": 80, "max_macro_turns": 5, "hold_success_steps": 1}
+        ep_f = {"episode_id": "cap_err", "task_key": "object_t0", "split": "burned", "seed": 1002}
+        res_f = rollout_episode(env_f, faulty, ep_f, cfg_f)
+        assert faulty.last_episode_error and "ZeroDivisionError" in faulty.last_episode_error
+        assert res_f.tokens == 150
+        res_s = rollout_episode(env_f, sample_cap, ep_f, cfg_f)
+        assert res_s.steps_taken > 0 and sample_cap.last_episode_error is None
+    finally:
+        sample_cap.close()
+        faulty.close()
+        env_f.close()
+
+    assert threading.active_count() <= base_threads + 1
+    print("  -> OK: Code-as-Policies HTTP + ImperativePolicyBase + error containment verified")
+
+
 def main() -> None:
     test_splits_lock()
     test_math_kinematics()
@@ -454,6 +583,8 @@ def main() -> None:
     test_examples_cli()
     test_stats_functions()
     test_multi_control_modes_and_joints()
+    test_video_and_keyframe_recorder()
+    test_code_as_policies_bridge()
     print("\nALL LOCAL VERIFICATION CHECKS PASSED.")
 
 

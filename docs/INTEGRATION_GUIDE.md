@@ -69,8 +69,8 @@
    # 1. 先用 burned 8 题冒烟调通接口
    MUJOCO_GL=egl python3 harness/evaluate.py --split burned --env-backend libero --policy-url http://127.0.0.1:8001 --out runs/smoke_test
 
-   # 2. 在 dev 100 题上开发调试与选模
-   MUJOCO_GL=egl python3 harness/evaluate.py --split dev --env-backend libero --policy-url http://127.0.0.1:8001 --out runs/my_method_dev
+   # 2. 在 dev 100 题上开发调试与选模（可加 --save-videos 或 --save-keyframes 导出双视角视频与关键帧）
+   MUJOCO_GL=egl python3 harness/evaluate.py --split dev --env-backend libero --policy-url http://127.0.0.1:8001 --save-videos --out runs/my_method_dev
    ```
 
 ### 方式 B：同环境类加载（`--policy-class`）
@@ -82,6 +82,11 @@ MUJOCO_GL=egl python3 harness/evaluate.py \
   --policy-class my_pkg.my_policy:MyPolicyClass \
   --out runs/my_method_dev
 ```
+
+### 补充：Code as Policies（代码生成式策略）接入
+如果组员做 Agentic / RSI 时希望大模型**直接生成一段包含 `if / while` 闭环逻辑的控制代码**来驱动机械臂，有两种接入方式：
+1. **开环路点列表**：在 `act(obs_dict)` 里用代码算出整条路点序列 `[[x1, y1, z1, g1], [x2, y2, z2, g2], ...]` 一次返回给底座逐步伺服；
+2. **闭环命令式脚本（`if / while` + `move_to` / `get_obs`）**：继承 [policy_protocol.py](../harness/policy_protocol.py) 里的 **`ImperativePolicyBase`**，在 `run_episode(self, api, task_meta)` 中把大模型生成的代码（含 `api.get_obs()`、`api.move_to(...)`、`api.move_delta(...)`、`api.open_gripper()` / `api.close_gripper()`、`api.record_llm_cost(...)`）直接跑在跨进程同步桥接上（参考模板 [examples/minimal_code_policy.py](../examples/minimal_code_policy.py)）。即使生成代码运行期报错或提前结束，评测器也会安全接管并正常完成回合。
 
 ---
 

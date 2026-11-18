@@ -31,6 +31,7 @@ from harness.policy_protocol import (
     MACRO_CONTROL_MODES,
     normalize_control_mode,
 )
+from harness.video_recorder import compose_dual_view_frame, save_episode_keyframes, write_mp4
 
 try:
     import numpy as np
@@ -209,6 +210,24 @@ class BaseEnvAdapter:
         self.macro_ori_kp = float(macro_ori_kp)
         self._last_obs: dict[str, Any] = {}
         self._prev_grip_cmd: float = -1.0
+        self._record_frames: bool = False
+        self._recorded_frames: list[Any] = []
+
+    def set_frame_recording(self, enabled: bool) -> None:
+        """Enable or disable per-step dual-camera RGB frame buffering."""
+        self._record_frames = bool(enabled)
+
+    def pop_recorded_frames(self) -> list[Any]:
+        """Return buffered episode frames and reset the internal buffer."""
+        frames = list(self._recorded_frames)
+        self._recorded_frames = []
+        return frames
+
+    def _maybe_record_frame(self, obs: dict[str, Any]) -> None:
+        if self._record_frames:
+            frame = compose_dual_view_frame(obs)
+            if frame is not None:
+                self._recorded_frames.append(frame)
 
     def reset_episode(self, episode_spec: dict[str, Any], task_cfg: dict[str, Any]) -> dict[str, Any]:
         raise NotImplementedError
@@ -449,6 +468,8 @@ class MockLiberoEnvAdapter(BaseEnvAdapter):
 
         obs = self._build_obs()
         self._last_obs = obs
+        self._recorded_frames = []
+        self._maybe_record_frame(obs)
         return obs
 
     def _active_target_pos(self) -> tuple[str, list[float]]:
@@ -680,6 +701,7 @@ class MockLiberoEnvAdapter(BaseEnvAdapter):
         success_now = self._check_success()
         obs = self._build_obs()
         self._last_obs = obs
+        self._maybe_record_frame(obs)
         reward = 1.0 if success_now else 0.0
         return obs, reward, False, {"is_success": success_now}
 
@@ -815,10 +837,27 @@ class LiberoPlusEnvAdapter(BaseEnvAdapter):
         self._task_cfg: dict[str, Any] = {}
         self._instruction = ""
         self._step_count = 0
+        self._reset_telemetry_state()
+
+    def _reset_telemetry_state(self) -> None:
         self._min_eef_dist = 999.0
         self._attempted_grasp = False
         self._ever_grasped = False
         self._dropped_count = 0
+        self._moved_toward_goal = False
+        self._stage1_done = False
+        self._active_progress_at_end = False
+        self._telemetry_targets: dict[str, int] = {}
+        self._telemetry_goal_site: int | None = None
+        self._telemetry_goal_body: int | None = None
+        self._telemetry_drawer_qadr: int | None = None
+        self._telemetry_handle_gid: int | None = None
+        self._telemetry_handle_sid: int | None = None
+        self._telemetry_z0: dict[str, float] = {}
+        self._telemetry_was_lifted: dict[str, bool] = {}
+        self._telemetry_init_goal_xy: dict[str, float] = {}
+        self._handle_engaged = False
+        self._progress_hist: list[float] = []
 
     def _get_suite(self, suite_name: str) -> Any:
         if suite_name not in self._suite_cache:
@@ -869,10 +908,7 @@ class LiberoPlusEnvAdapter(BaseEnvAdapter):
         self._episode_spec = dict(episode_spec)
         self._task_cfg = dict(task_cfg)
         self._step_count = 0
-        self._min_eef_dist = 999.0
-        self._attempted_grasp = False
-        self._ever_grasped = False
-        self._dropped_count = 0
+        self._reset_telemetry_state()
 
         suite_name = str(episode_spec["suite"])
         clean_base_name = str(episode_spec.get("clean_base_name") or task_cfg["clean_base_name"])
@@ -948,10 +984,162 @@ class LiberoPlusEnvAdapter(BaseEnvAdapter):
             self._env.env.robots[0].controller.use_delta = False
 
         self._prev_grip_cmd = -1.0
+        self._init_telemetry_anchors()
         self._ensure_nominal_cameras(suite_name, clean_base_name, ood_axis)
         obs = self._sanitize_obs(self._raw_obs)
         self._last_obs = obs
+        self._recorded_frames = []
+        self._maybe_record_frame(obs)
         return obs
+
+    def _safe_body_id(self, sim: Any, name: str) -> int | None:
+        try:
+            return int(sim.model.body_name2id(name))
+        except Exception:
+            return None
+
+    def _safe_site_id(self, sim: Any, name: str) -> int | None:
+        try:
+            return int(sim.model.site_name2id(name))
+        except Exception:
+            return None
+
+    def _safe_geom_id(self, sim: Any, name: str) -> int | None:
+        try:
+            return int(sim.model.geom_name2id(name))
+        except Exception:
+            return None
+
+    def _telemetry_goal_pos(self, sim: Any) -> list[float] | None:
+        if self._telemetry_goal_site is not None:
+            return [float(x) for x in sim.data.site_xpos[self._telemetry_goal_site][:3]]
+        if self._telemetry_goal_body is not None:
+            return [float(x) for x in sim.data.body_xpos[self._telemetry_goal_body][:3]]
+        return None
+
+    def _init_telemetry_anchors(self) -> None:
+        if self._env is None:
+            return
+        sim = self._env.sim
+        task_key = str(self._episode_spec.get("task_key", ""))
+        if task_key == "goal_t0":
+            try:
+                jid = int(sim.model.joint_name2id("wooden_cabinet_1_middle_level"))
+                self._telemetry_drawer_qadr = int(sim.model.jnt_qposadr[jid])
+            except Exception:
+                self._telemetry_drawer_qadr = None
+            self._telemetry_handle_gid = self._safe_geom_id(sim, "wooden_cabinet_1_g29")
+            self._telemetry_handle_sid = self._safe_site_id(sim, "wooden_cabinet_1_middle_region")
+            return
+
+        if task_key == "spatial_t0":
+            target_names = ("akita_black_bowl_1_main",)
+            self._telemetry_goal_body = self._safe_body_id(sim, "plate_1_main")
+            self._telemetry_goal_site = self._safe_site_id(sim, "main_table_plate_region") if self._telemetry_goal_body is None else None
+        elif task_key == "long_t0":
+            target_names = ("alphabet_soup_1_main", "tomato_sauce_1_main")
+            self._telemetry_goal_site = self._safe_site_id(sim, "basket_1_contain_region")
+            self._telemetry_goal_body = self._safe_body_id(sim, "basket_1_main")
+        else:
+            target_names = ("alphabet_soup_1_main",)
+            self._telemetry_goal_site = self._safe_site_id(sim, "basket_1_contain_region")
+            self._telemetry_goal_body = self._safe_body_id(sim, "basket_1_main")
+
+        goal_pos = self._telemetry_goal_pos(sim)
+        for name in target_names:
+            bid = self._safe_body_id(sim, name)
+            if bid is None:
+                continue
+            pos = [float(x) for x in sim.data.body_xpos[bid][:3]]
+            self._telemetry_targets[name] = bid
+            self._telemetry_z0[name] = pos[2]
+            self._telemetry_was_lifted[name] = False
+            self._telemetry_init_goal_xy[name] = vec2_dist(pos, goal_pos) if goal_pos is not None else 0.4
+
+    def _update_telemetry(self, grip_cmd: float) -> None:
+        if self._env is None or "robot0_eef_pos" not in self._raw_obs:
+            return
+        sim = self._env.sim
+        eef_pos = [float(x) for x in self._raw_obs["robot0_eef_pos"][:3]]
+        task_key = str(self._episode_spec.get("task_key", ""))
+
+        if task_key == "goal_t0" and self._telemetry_drawer_qadr is not None:
+            handle_pos: list[float] | None = None
+            if self._telemetry_handle_gid is not None:
+                handle_pos = [float(x) for x in sim.data.geom_xpos[self._telemetry_handle_gid][:3]]
+            elif self._telemetry_handle_sid is not None:
+                handle_pos = [float(x) for x in sim.data.site_xpos[self._telemetry_handle_sid][:3]]
+            if handle_pos is not None:
+                d = vec3_dist(eef_pos, handle_pos)
+                self._min_eef_dist = min(self._min_eef_dist, d)
+                if d < 0.055 and grip_cmd > 0.2:
+                    self._handle_engaged = True
+            else:
+                d = 999.0
+
+            drawer_open = max(0.0, -float(sim.data.qpos[self._telemetry_drawer_qadr]))
+            if drawer_open >= 0.02:
+                self._ever_grasped = True
+            if drawer_open >= 0.04:
+                self._moved_toward_goal = True
+            if self._handle_engaged and d > 0.085 and drawer_open < 0.12:
+                self._dropped_count += 1
+                self._handle_engaged = False
+
+            self._progress_hist.append(drawer_open)
+            self._active_progress_at_end = (drawer_open > 0.04) and (
+                len(self._progress_hist) < 15 or drawer_open > self._progress_hist[-15] + 0.005
+            )
+            return
+
+        goal_pos = self._telemetry_goal_pos(sim)
+        if not self._telemetry_targets or goal_pos is None:
+            if "object-state" in self._raw_obs and len(self._raw_obs["object-state"]) >= 3:
+                d = vec3_dist(eef_pos, self._raw_obs["object-state"][:3])
+                self._min_eef_dist = min(self._min_eef_dist, d)
+                if d < 0.06 and grip_cmd > 0.2:
+                    self._ever_grasped = True
+            return
+
+        active_xy_d: float | None = None
+        active_dz = 0.0
+        last_xy_d: float | None = None
+        last_dz = 0.0
+        for name, bid in self._telemetry_targets.items():
+            pos = [float(x) for x in sim.data.body_xpos[bid][:3]]
+            d_eef = vec3_dist(eef_pos, pos)
+            self._min_eef_dist = min(self._min_eef_dist, d_eef)
+
+            xy_d = vec2_dist(pos, goal_pos)
+            dz = pos[2] - self._telemetry_z0[name]
+            last_xy_d = xy_d
+            last_dz = dz
+            if dz >= 0.028 or (d_eef < 0.06 and grip_cmd > 0.2):
+                self._ever_grasped = True
+            if dz >= 0.040:
+                self._telemetry_was_lifted[name] = True
+            if self._telemetry_was_lifted.get(name) and dz < 0.012 and xy_d > 0.095:
+                self._dropped_count += 1
+                self._telemetry_was_lifted[name] = False
+            if xy_d < self._telemetry_init_goal_xy[name] - 0.04:
+                self._moved_toward_goal = True
+
+            is_placed = xy_d < 0.095 and abs(pos[2] - goal_pos[2]) < 0.09 and (d_eef > 0.05 or grip_cmd <= 0.0)
+            if task_key == "long_t0" and is_placed:
+                self._stage1_done = True
+            if active_xy_d is None and not is_placed:
+                active_xy_d = xy_d
+                active_dz = dz
+
+        if active_xy_d is None:
+            active_xy_d = last_xy_d
+            active_dz = last_dz
+
+        if active_xy_d is not None:
+            self._progress_hist.append(-active_xy_d)
+            self._active_progress_at_end = (active_dz >= 0.03) or (
+                len(self._progress_hist) >= 15 and self._progress_hist[-1] > self._progress_hist[-15] + 0.01
+            )
 
     def _compute_rot180_cameras(self, env_obj: Any) -> tuple[dict[str, Any], dict[str, Any]]:
         """Compute camera intrinsics & extrinsics aligned to [::-1, ::-1] rotated images."""
@@ -1042,19 +1230,17 @@ class LiberoPlusEnvAdapter(BaseEnvAdapter):
 
     def _step_raw(self, raw_action: list[float]) -> tuple[dict[str, Any], float, bool, dict[str, Any]]:
         self._step_count += 1
-        if float(raw_action[-1]) > 0.2:
+        grip_cmd = float(raw_action[-1])
+        if grip_cmd > 0.2:
             self._attempted_grasp = True
         self._raw_obs, reward, done, info = self._env.step(list(raw_action))
-        if "object-state" in self._raw_obs and len(self._raw_obs["object-state"]) >= 3 and "robot0_eef_pos" in self._raw_obs:
-            d = vec3_dist(self._raw_obs["robot0_eef_pos"][:3], self._raw_obs["object-state"][:3])
-            self._min_eef_dist = min(self._min_eef_dist, d)
-            if d < 0.06 and float(raw_action[-1]) > 0.2:
-                self._ever_grasped = True
+        self._update_telemetry(grip_cmd)
         is_succ = bool(done or self._env.check_success())
         info = dict(info or {})
         info["is_success"] = is_succ
         obs = self._sanitize_obs(self._raw_obs)
         self._last_obs = obs
+        self._maybe_record_frame(obs)
         return obs, float(reward), False, info
 
     def _step_osc_delta(self, action_7d: Sequence[float]) -> tuple[dict[str, Any], float, bool, dict[str, Any]]:
@@ -1097,9 +1283,9 @@ class LiberoPlusEnvAdapter(BaseEnvAdapter):
             "attempted_grasp": self._attempted_grasp,
             "ever_grasped": self._ever_grasped,
             "dropped_count": self._dropped_count,
-            "moved_toward_goal": False,
-            "stage1_done": False,
-            "active_progress_at_end": False,
+            "moved_toward_goal": self._moved_toward_goal,
+            "stage1_done": self._stage1_done,
+            "active_progress_at_end": self._active_progress_at_end,
         }
 
     def close(self) -> None:
@@ -1139,6 +1325,8 @@ def rollout_episode(
     task_cfg: dict[str, Any],
     *,
     ledger: CostLedger | None = None,
+    video_path: Path | None = None,
+    keyframes_dir: Path | None = None,
 ) -> EpisodeResult:
     """Execute one unified dual-horizon rollout matching official LIBERO success verification."""
     standard_steps = int(task_cfg["standard_steps"])
@@ -1146,78 +1334,84 @@ def rollout_episode(
     hold_target = int(task_cfg.get("hold_success_steps", 1))
     max_macro_turns = int(task_cfg.get("max_macro_turns", 15))
     mode = normalize_control_mode(getattr(env, "control_mode", getattr(policy, "control_mode", "osc_delta_eef")))
+    record_media = video_path is not None or keyframes_dir is not None
 
-    obs = env.reset_episode(episode_spec, task_cfg)
-    policy.reset(
-        {
-            "episode_id": episode_spec["episode_id"],
-            "task_key": episode_spec["task_key"],
-            "instruction": obs.get("instruction", task_cfg["instruction"]),
-            "standard_steps": standard_steps,
-            "extended_steps": extended_steps,
-            "max_macro_turns": max_macro_turns,
-            "control_mode": mode,
-        }
-    )
+    env.set_frame_recording(record_media)
+    try:
+        obs = env.reset_episode(episode_spec, task_cfg)
+        policy.reset(
+            {
+                "episode_id": episode_spec["episode_id"],
+                "task_key": episode_spec["task_key"],
+                "instruction": obs.get("instruction", task_cfg["instruction"]),
+                "standard_steps": standard_steps,
+                "extended_steps": extended_steps,
+                "max_macro_turns": max_macro_turns,
+                "control_mode": mode,
+            }
+        )
 
-    steps_taken = 0
-    macro_turns = 0
-    episode_llm_calls = 0
-    episode_tokens = 0
-    consecutive_success = 0
-    sustained_success_step: int | None = None
-    action_queue: list[list[float]] = []
+        steps_taken = 0
+        macro_turns = 0
+        episode_llm_calls = 0
+        episode_tokens = 0
+        consecutive_success = 0
+        sustained_success_step: int | None = None
+        action_queue: list[list[float]] = []
 
-    while steps_taken < extended_steps:
-        if not action_queue:
-            if policy.family == "agentic" and macro_turns >= max_macro_turns:
-                action_queue = [neutral_action_for_mode(mode, obs)]
-            else:
-                raw_action, call_cost = policy.act(obs)
-                if ledger is not None:
-                    ledger.add_call_cost(call_cost)
-                episode_llm_calls += int((call_cost or {}).get("llm_total_calls", 0))
-                episode_tokens += (
-                    int((call_cost or {}).get("prompt_tokens", 0))
-                    + int((call_cost or {}).get("completion_tokens", 0))
-                    + int((call_cost or {}).get("reasoning_tokens", 0))
-                )
-                macro_inc = int((call_cost or {}).get("macro_turn_increment", 1 if policy.family == "agentic" else 0))
-                macro_turns += macro_inc
-
-                if not raw_action:
+        while steps_taken < extended_steps:
+            if not action_queue:
+                if policy.family == "agentic" and macro_turns >= max_macro_turns:
                     action_queue = [neutral_action_for_mode(mode, obs)]
-                elif isinstance(raw_action[0], (list, tuple)):
-                    action_queue = [[float(x) for x in step_a] for step_a in raw_action]
                 else:
-                    action_queue = [[float(x) for x in raw_action]]
+                    raw_action, call_cost = policy.act(obs)
+                    if ledger is not None:
+                        ledger.add_call_cost(call_cost)
+                    episode_llm_calls += int((call_cost or {}).get("llm_total_calls", 0))
+                    episode_tokens += (
+                        int((call_cost or {}).get("prompt_tokens", 0))
+                        + int((call_cost or {}).get("completion_tokens", 0))
+                        + int((call_cost or {}).get("reasoning_tokens", 0))
+                    )
+                    macro_inc = int((call_cost or {}).get("macro_turn_increment", 1 if policy.family == "agentic" else 0))
+                    macro_turns += macro_inc
 
-        act_vec = action_queue.pop(0)
-        if mode in MACRO_CONTROL_MODES:
-            obs, _reward, _done, info = env.step_macro(
-                act_vec,
-                max_remaining_steps=extended_steps - steps_taken,
-                hold_target=hold_target,
-                initial_consecutive_success=consecutive_success,
-            )
-            substeps = int(info.get("substeps", 1))
-            consecutive_success = int(info.get("consecutive_success", 0))
-            sustained_offset = info.get("sustained_at_substep")
-            steps_taken += substeps
-            if sustained_offset is not None and sustained_success_step is None:
-                sustained_success_step = (steps_taken - substeps) + int(sustained_offset)
-                break
-        else:
-            obs, _reward, _done, info = env.step(act_vec)
-            steps_taken += 1
+                    if not raw_action:
+                        action_queue = [neutral_action_for_mode(mode, obs)]
+                    elif isinstance(raw_action[0], (list, tuple)):
+                        action_queue = [[float(x) for x in step_a] for step_a in raw_action]
+                    else:
+                        action_queue = [[float(x) for x in raw_action]]
 
-            if info.get("is_success"):
-                consecutive_success += 1
-                if consecutive_success >= hold_target and sustained_success_step is None:
-                    sustained_success_step = steps_taken
+            act_vec = action_queue.pop(0)
+            if mode in MACRO_CONTROL_MODES:
+                obs, _reward, _done, info = env.step_macro(
+                    act_vec,
+                    max_remaining_steps=extended_steps - steps_taken,
+                    hold_target=hold_target,
+                    initial_consecutive_success=consecutive_success,
+                )
+                substeps = int(info.get("substeps", 1))
+                consecutive_success = int(info.get("consecutive_success", 0))
+                sustained_offset = info.get("sustained_at_substep")
+                steps_taken += substeps
+                if sustained_offset is not None and sustained_success_step is None:
+                    sustained_success_step = (steps_taken - substeps) + int(sustained_offset)
                     break
             else:
-                consecutive_success = 0
+                obs, _reward, _done, info = env.step(act_vec)
+                steps_taken += 1
+
+                if info.get("is_success"):
+                    consecutive_success += 1
+                    if consecutive_success >= hold_target and sustained_success_step is None:
+                        sustained_success_step = steps_taken
+                        break
+                else:
+                    consecutive_success = 0
+    finally:
+        frames = env.pop_recorded_frames() if record_media else []
+        env.set_frame_recording(False)
 
     success_1_5x = sustained_success_step is not None and sustained_success_step <= extended_steps
     success_1_0x = sustained_success_step is not None and sustained_success_step <= standard_steps
@@ -1231,6 +1425,12 @@ def rollout_episode(
         }
     )
     cluster = classify_failure(telemetry)
+
+    if record_media and frames:
+        if video_path is not None:
+            write_mp4(video_path, frames, fps=20)
+        if keyframes_dir is not None:
+            save_episode_keyframes(keyframes_dir, episode_spec["episode_id"], frames, suffix=cluster)
 
     if ledger is not None:
         ledger.online_episodes += 1

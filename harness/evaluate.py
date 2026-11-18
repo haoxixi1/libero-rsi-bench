@@ -190,6 +190,8 @@ def run_evaluation(
     sealed_log_path: Path | None = None,
     task_filter: list[str] | None = None,
     limit: int | None = None,
+    save_videos: bool = False,
+    save_keyframes: bool = False,
 ) -> dict[str, Any]:
     """Evaluate any remote HTTP or in-process BasePolicy on a locked split."""
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -238,10 +240,21 @@ def run_evaluation(
 
     t0 = time.monotonic()
     results: list[EpisodeResult] = []
+    videos_dir = (out_dir / "videos") if save_videos else None
+    keyframes_dir = (out_dir / "keyframes") if save_keyframes else None
     try:
         tasks_cfg = manifest["tasks"]
         for ep in episodes_spec:
-            res = rollout_episode(env, policy, ep, tasks_cfg[ep["task_key"]], ledger=ledger)
+            v_path = (videos_dir / f"{ep['episode_id']}.mp4") if videos_dir is not None else None
+            res = rollout_episode(
+                env,
+                policy,
+                ep,
+                tasks_cfg[ep["task_key"]],
+                ledger=ledger,
+                video_path=v_path,
+                keyframes_dir=keyframes_dir,
+            )
             results.append(res)
     finally:
         env.close()
@@ -326,6 +339,8 @@ def main() -> None:
     parser.add_argument("--gpu-hours", type=float, default=0.0)
     parser.add_argument("--tasks", nargs="+", default=None, help="Optional subset of task_keys for smoke checks")
     parser.add_argument("--limit", type=int, default=None)
+    parser.add_argument("--save-videos", action="store_true", help="Save per-episode dual-view MP4 rollouts under out/videos/")
+    parser.add_argument("--save-keyframes", action="store_true", help="Save start/mid/end PNG keyframes under out/keyframes/")
     parser.add_argument("--out", type=Path, required=True)
     args = parser.parse_args()
 
@@ -345,6 +360,8 @@ def main() -> None:
         gpu_hours=args.gpu_hours,
         task_filter=args.tasks,
         limit=args.limit,
+        save_videos=args.save_videos,
+        save_keyframes=args.save_keyframes,
     )
     print(json.dumps(summary, indent=2, ensure_ascii=False))
 
