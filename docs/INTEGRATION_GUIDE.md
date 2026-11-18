@@ -54,29 +54,12 @@
 
 ---
 
-## 2. 两种标准接入方式
+## 2. 两种本地运行与接入方式
 
-首次运行真实仿真前，请按 [LIBERO-plus 评测环境安装步骤](../README.md#2-安装-libero-plus-评测环境) 安装源码和仿真资源。
+每位组员在**自己的 GPU 机器**上按 [一键安装步骤](../README.md#第-1-步在你的-gpu-机器上安装-libero-plus-评测环境) 配好环境后，按是否与模型库存在 Python 包冲突二选一即可：
 
-### 方式 A（推荐）：HTTP Policy Server 跨环境解耦
-如果你的训练环境（例如装有新版 `PyTorch`/`transformers`/`LeRobot`）与 `LIBERO-plus`（`mujoco==2.3.7`, `numpy<2.0`）存在 Python 包冲突，**完全不需要把环境合并**！
-
-1. 在你自己的环境里继承 `BasePolicy` 并用 `PolicyHTTPServer` 暴露端口（参考模板 [examples/minimal_policy_server.py](../examples/minimal_policy_server.py)）：
-   ```bash
-   # 在你的算法环境里运行（只依赖 Python 标准库 + 你自己的推理包）
-   PYTHONPATH=/path/to/libero-rsi-bench python3 your_policy_server.py --port 8001
-   ```
-2. 在 `LIBERO-plus` 评测环境里用统一评测器连上去跑分（无头服务器需设置 `MUJOCO_GL=egl`）：
-   ```bash
-   # 1. 先用 burned 8 题冒烟调通接口
-   MUJOCO_GL=egl python3 harness/evaluate.py --split burned --env-backend libero --policy-url http://127.0.0.1:8001 --out runs/smoke_test
-
-   # 2. 在 dev 100 题上开发调试与选模（可加 --save-videos 或 --save-keyframes 导出双视角视频与关键帧）
-   MUJOCO_GL=egl python3 harness/evaluate.py --split dev --env-backend libero --policy-url http://127.0.0.1:8001 --save-videos --out runs/my_method_dev
-   ```
-
-### 方式 B：同环境类加载（`--policy-class`）
-如果你的策略与 `LIBERO-plus` 处于同一 Python 环境，可直接通过模块路径评测：
+### 方式 A（无冲突最省事）：单命令直接加载策略类（`--policy-class`）
+如果你的策略与 `LIBERO-plus` 在同一个 Python 环境中，直接一条命令开跑（开发调试可加 `--limit 4` 秒跑几题）：
 ```bash
 MUJOCO_GL=egl python3 harness/evaluate.py \
   --split dev \
@@ -84,6 +67,22 @@ MUJOCO_GL=egl python3 harness/evaluate.py \
   --policy-class my_pkg.my_policy:MyPolicyClass \
   --out runs/my_method_dev
 ```
+
+### 方式 B（推荐用于不同虚拟环境）：本机 HTTP Policy Server 解耦
+如果你的训练环境（例如装有新版 `PyTorch`/`transformers`/`LeRobot`）与 `LIBERO-plus`（`mujoco==2.3.7`, `numpy<2.0`）存在 Python 包冲突，**完全不需要把环境合并**！直接在你自己的机器上开两个终端即可：
+
+1. 在**算法环境终端**继承 `BasePolicy` 并用 `PolicyHTTPServer` 暴露本地端口（参考模板 [examples/minimal_policy_server.py](../examples/minimal_policy_server.py)）：
+   ```bash
+   PYTHONPATH=/path/to/libero-rsi-bench python3 your_policy_server.py --port 8001
+   ```
+2. 在 **`libero-bench` 环境终端**连上去跑分（无头服务器需设置 `MUJOCO_GL=egl`）：
+   ```bash
+   # 1. 快速抽 4 题冒烟调通接口
+   MUJOCO_GL=egl python3 harness/evaluate.py --split dev --limit 4 --env-backend libero --policy-url http://127.0.0.1:8001 --out runs/smoke_test
+
+   # 2. 在 dev 100 题上完整调试与选模（可加 --save-videos 或 --save-keyframes 导出双视角视频与关键帧）
+   MUJOCO_GL=egl python3 harness/evaluate.py --split dev --env-backend libero --policy-url http://127.0.0.1:8001 --save-videos --out runs/my_method_dev
+   ```
 
 ### 补充：Code as Policies（代码生成式策略）接入
 如果组员做 Agentic / RSI 时希望大模型**直接生成一段包含 `if / while` 闭环逻辑的控制代码**来驱动机械臂，有两种接入方式：
@@ -101,15 +100,16 @@ MUJOCO_GL=egl python3 harness/evaluate.py \
 
 ---
 
-## 4. 最终冻结与一次性开卷汇总
+## 4. 最终出分与全组汇总
 
-1. 所有组员在 `dev` 上确定最终权重、提示词或演化产物并冻结后，启动各自的 Policy Server。
-2. 由 Benchmark 负责人统一运行一次性密封集评测（须显式加 `--confirm-unseal`，读取记录自动写入 `runs/sealed_reads.log`）：
+1. 每位组员在 `dev` 上确定最终权重、提示词或演化产物后，在**各自机器**上跑一次 `test_id`（100 题）和 `test_ood`（112 题）：
    ```bash
-   MUJOCO_GL=egl python3 harness/evaluate.py --split sealed_id  --env-backend libero --confirm-unseal --policy-url http://127.0.0.1:8001 --demo-count 200 --gpu-hours 4.5 --out runs/sealed_id_teamA
-   MUJOCO_GL=egl python3 harness/evaluate.py --split sealed_ood --env-backend libero --confirm-unseal --policy-url http://127.0.0.1:8001 --demo-count 200 --gpu-hours 4.5 --out runs/sealed_ood_teamA
+   MUJOCO_GL=egl python3 harness/evaluate.py --split test_id  --env-backend libero --policy-url http://127.0.0.1:8001 --demo-count 200 --gpu-hours 4.5 --out runs/my_method_id
+   MUJOCO_GL=egl python3 harness/evaluate.py --split test_ood --env-backend libero --policy-url http://127.0.0.1:8001 --demo-count 200 --gpu-hours 4.5 --out runs/my_method_ood
    ```
-3. 运行聚合出图脚本生成最终 Markdown 对比表（含 Wilson 95% 区间、McNemar 检验、4 类失败归因）及 3 张矢量图：
+   *(若用 `--policy-class`，直接把 `--policy-url ...` 换成 `--policy-class ...` 即可。)*
+2. 把大家跑出来的 `runs/*_id` / `runs/*_ood` 结果目录收集到同一台机器上，运行聚合脚本生成最终 Markdown 对比表（含 Wilson 95% 区间、McNemar 检验、4 类失败归因）及 3 张矢量图：
    ```bash
-   python3 harness/stats_and_report.py --runs runs/sealed_id_* --out runs/final_report_id
+   python3 harness/stats_and_report.py --runs runs/*_id  --out runs/final_report_id
+   python3 harness/stats_and_report.py --runs runs/*_ood --out runs/final_report_ood
    ```

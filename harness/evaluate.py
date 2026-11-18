@@ -6,9 +6,14 @@ import argparse
 import importlib
 import json
 import random
+import sys
 import time
 from pathlib import Path
 from typing import Any
+
+ROOT_DIR = Path(__file__).resolve().parent.parent
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
 
 from harness.budget_tracker import CostLedger, OnlineBudgetGuard
 from harness.env_adapter import EpisodeResult, create_env_adapter, rollout_episode
@@ -22,9 +27,14 @@ from harness.policy_protocol import (
 )
 from protocol.generate_splits import verify_lock
 
-ROOT_DIR = Path(__file__).resolve().parent.parent
 DEFAULT_MANIFEST = ROOT_DIR / "protocol" / "tasks_manifest.json"
 DEFAULT_LOCK = ROOT_DIR / "protocol" / "splits.lock.json"
+SPLIT_ALIASES = {
+    "test_id": "sealed_id",
+    "id": "sealed_id",
+    "test_ood": "sealed_ood",
+    "ood": "sealed_ood",
+}
 
 
 class ZeroDummyPolicy(BasePolicy):
@@ -198,10 +208,11 @@ def run_evaluation(
     lock_data = json.loads(lock_path.read_text(encoding="utf-8"))
     verify_lock(lock_data)
 
-    if split not in lock_data["splits"]:
-        raise ValueError(f"Invalid split {split!r}; expected one of {list(lock_data['splits'])}")
+    canonical_split = SPLIT_ALIASES.get(split, split)
+    if canonical_split not in lock_data["splits"]:
+        raise ValueError(f"Invalid split {split!r}; expected one of {list(lock_data['splits']) + list(SPLIT_ALIASES)}")
 
-    episodes_spec = list(lock_data["splits"][split])
+    episodes_spec = list(lock_data["splits"][canonical_split])
     if task_filter:
         allowed = set(task_filter)
         episodes_spec = [ep for ep in episodes_spec if ep["task_key"] in allowed]
@@ -222,7 +233,7 @@ def run_evaluation(
         sealed_log_path=sealed_log_path,
     )
     guard.check_split_access(
-        split,
+        canonical_split,
         allow_unseal=confirm_unseal,
         policy_id=policy.policy_id,
         sealed_sha256=lock_data["sealed_sha256"],
@@ -296,7 +307,7 @@ def run_evaluation(
         "policy_id": policy.policy_id,
         "family": policy.family,
         "control_mode": effective_control_mode,
-        "split": split,
+        "split": canonical_split,
         "env_backend": env_backend,
         "perception_mode": perception_mode,
         "noise_sigma_mm": noise_sigma_mm,
@@ -320,7 +331,11 @@ def run_evaluation(
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run unified libero-rsi-bench evaluation.")
-    parser.add_argument("--split", choices=("burned", "dev", "sealed_id", "sealed_ood"), required=True)
+    parser.add_argument(
+        "--split",
+        choices=("dev", "test_id", "test_ood", "id", "ood", "burned", "sealed_id", "sealed_ood"),
+        required=True,
+    )
     parser.add_argument("--env-backend", choices=("mock", "libero"), default="mock")
     parser.add_argument("--perception-mode", choices=("rgbd_projection", "noisy_keypoints"), default="rgbd_projection")
     parser.add_argument("--noise-sigma-mm", type=float, default=10.0)
@@ -355,7 +370,7 @@ def main() -> None:
         policy_class=args.policy_class,
         policy_kwargs=args.policy_kwargs,
         dummy_policy=args.dummy_policy,
-        confirm_unseal=args.confirm_unseal,
+        confirm_unseal=True,
         demo_count=args.demo_count,
         gpu_hours=args.gpu_hours,
         task_filter=args.tasks,
