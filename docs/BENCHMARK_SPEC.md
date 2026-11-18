@@ -8,12 +8,14 @@
 
 共精选 **4 个代表性任务**（4 个任务视频见 [docs/videos/](videos/)）：
 
-| 任务 ID | 任务说明 | 英文指令（`instruction`） | 标准步数 `1.0x` | 放宽上限 `1.5x` | 任务演示 |
+| 任务 ID | 任务说明 | 英文指令（`instruction`） | 标准步数 `1.0x` | 放宽上限 `1.5x` *(暂定)* | 任务演示 |
 | :--- | :--- | :--- | ---: | ---: | :--- |
 | `spatial_t0` | 把盘子与小碗之间的黑碗放到盘子上 | `pick up the black bowl between the plate and the ramekin and place it on the plate` | **220** | **450** | [spatial_t0.mp4](videos/spatial_t0.mp4) |
 | `object_t0` | 抓起字母汤罐头放进篮子里 | `pick up the alphabet soup and place it in the basket` | **280** | **450** | [object_t0.mp4](videos/object_t0.mp4) |
 | `goal_t0` | 拉开木柜子的中间抽屉 | `open the middle drawer of the cabinet` | **300** | **450** | [goal_t0.mp4](videos/goal_t0.mp4) |
 | `long_t0` | 先后把字母汤和番茄酱两罐放进篮子 | `put both the alphabet soup and the tomato sauce in the basket` | **520** | **750** | [long_t0.mp4](videos/long_t0.mp4) |
+
+> **注**：表中的 **放宽上限 `1.5x`（`450 / 750` 步）目前为暂定值**，后续可根据各组员方法在 `dev` 上的实际步数需求在 [protocol/tasks_manifest.json](../protocol/tasks_manifest.json) 的 `extended_steps` 字段中统一调整。
 
 除标准域内测试（**ID**）外，最终还会从 `LIBERO-Plus` 抽取 **4 类抗干扰域外测试（OOD，共 112 题）**：
 1. **`objects_layout`**：桌上物体位置偏移或注入额外干扰物；
@@ -66,10 +68,10 @@ huggingface-cli download HuggingFaceVLA/libero --repo-type dataset --local-dir .
 
 ### 为什么设 `1.0x` 与 `1.5x` 两个步数上限？
 由于 Agentic / RSI 每次决策驱动机械臂分段对齐或重抓，物理步数通常比 20Hz 神经网络模型多 30%–50%。为保证公平：
-1. **统一运行规则**：评测时每个回合统一允许最多跑到 `1.5x` 上限（单阶段 `450` 步、`long_t0` `750` 步），只要达成任务判定立即提前结束并记下精确步数 $t_{\text{succ}}$。
+1. **统一运行规则**：评测时每个回合统一允许最多跑到 `1.5x` 放宽上限（目前暂定单阶段 `450` 步、`long_t0` `750` 步，后续可按全组实测情况调整 [tasks_manifest.json](../protocol/tasks_manifest.json) 的 `extended_steps`），只要达成任务判定立即提前结束并记下精确步数 $t_{\text{succ}}$。
 2. **一趟跑出双成绩**：
    * **`SR@1.0x`**：$t_{\text{succ}} \le 220 / 280 / 300 / 520$ 的成功率（对齐原版 LIBERO 官方步数要求）；
-   * **`SR@1.5x`**：$t_{\text{succ}} \le 450 / 750$ 的成功率（放宽步数后真正把任务做完的概率）。
+   * **`SR@1.5x`**：$t_{\text{succ}} \le 450 / 750$（暂定）的成功率（放宽步数后真正把任务做完的概率）。
 
 ### 接口与最终汇总
 * 具体观测字典（含图像、米制深度、相机内外参、末端与 `joint_pos` 本体状态）、**6 种可选 `control_mode`**（相对/绝对 EEF、相对/绝对关节角、Agent 宏相对位移/绝对路点）及 HTTP 解耦启动命令，见 [组员接入规范](INTEGRATION_GUIDE.md)。
