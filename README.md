@@ -31,7 +31,7 @@ libero-rsi-bench/
 │   └── minimal_dev_interaction.py # 在预算锁内使用 DevInteractionEnv 的最小模板
 ├── tests/
 │   └── verify_all.py              # 零第三方依赖全链路验证测试套件
-├── requirements-harness.txt       # 评测底座环境依赖（LIBERO-plus + MuJoCo 2.3.7）
+├── requirements-harness.txt       # 真实评测的 Python 依赖（LIBERO-plus 源码与资源另行安装）
 └── runs/                          # 评测结果、sealed_reads.log 与自动生成报表（不入 Git）
 ```
 
@@ -45,7 +45,27 @@ python3 protocol/generate_splits.py --verify
 python3 tests/verify_all.py
 ```
 
-### 2. 在 `LIBERO-plus` GPU 服务器上联调接入
+### 2. 安装 LIBERO-plus 评测环境
+
+`--env-backend libero` 使用 [sylvestf/LIBERO-plus](https://github.com/sylvestf/LIBERO-plus)，Python 导入名为 `libero`。请在 Python 3.10 评测环境中安装。如果该环境已经装了原版 LIBERO，请先移除原版，因为两者使用相同的包名。
+
+在 Ubuntu 上先确保已安装 ImageMagick 的 Wand 系统库（`sudo apt-get install libmagickwand-dev`）。从本仓库根目录运行下面两条命令。
+
+```bash
+git clone https://github.com/sylvestf/LIBERO-plus.git ../LIBERO-plus
+python -m pip install -r requirements-harness.txt -r ../LIBERO-plus/extra_requirements.txt -e ../LIBERO-plus
+```
+
+从 [LIBERO-plus 资源页](https://huggingface.co/datasets/Sylvest/LIBERO-plus/tree/main) 下载 `assets.zip`，解压到 `../LIBERO-plus/libero/libero/`，确认解压后有 `assets/scenes/`。评测需要这些仿真资源。训练演示数据可按各自方法另行下载。
+
+在评测终端设置独立的配置目录，并检查导入与资源路径。首次运行若询问是否自定义数据集路径，可输入 `n` 使用默认路径。
+
+```bash
+export LIBERO_CONFIG_PATH="$HOME/.config/libero-rsi-bench"
+python -c 'from pathlib import Path; from libero.libero import benchmark, get_libero_path; from libero.libero.envs import OffScreenRenderEnv; assets = Path(get_libero_path("assets")); assert (assets / "scenes").is_dir(), assets; print(assets)'
+```
+
+### 3. 在 `LIBERO-plus` GPU 服务器上联调接入
 ```bash
 # 终端 1：在你的算法环境中启动 HTTP 策略服务（参考 examples/minimal_policy_server.py）
 python3 examples/minimal_policy_server.py --family il --port 8000

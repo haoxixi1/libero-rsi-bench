@@ -1,8 +1,6 @@
-# Minimal Conda environment for the authoritative evaluation harness (`libero_bench`)
+# Python dependencies for the LIBERO-plus evaluation harness
 # Recommended Python: 3.10
-# Note: Install sylvestf/LIBERO-plus as a drop-in replacement for LIBERO:
-#   git clone https://github.com/sylvestf/LIBERO-plus.git
-#   cd LIBERO-plus && pip install -e .
+# See README.md for the LIBERO-plus source install and simulator assets.
 
 numpy<2.0
 mujoco==2.3.7
@@ -14,3 +12,6 @@ bddl>=1.0.1
 easydict>=1.10
 cloudpickle
 scipy>=1.10
+torch
+PyYAML
+matplotlib

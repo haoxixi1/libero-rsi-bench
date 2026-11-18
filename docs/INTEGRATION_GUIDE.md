@@ -56,6 +56,8 @@
 
 ## 2. 两种标准接入方式
 
+首次运行真实仿真前，请按 [LIBERO-plus 评测环境安装步骤](../README.md#2-安装-libero-plus-评测环境) 安装源码和仿真资源。
+
 ### 方式 A（推荐）：HTTP Policy Server 跨环境解耦
 如果你的训练环境（例如装有新版 `PyTorch`/`transformers`/`LeRobot`）与 `LIBERO-plus`（`mujoco==2.3.7`, `numpy<2.0`）存在 Python 包冲突，**完全不需要把环境合并**！
 
