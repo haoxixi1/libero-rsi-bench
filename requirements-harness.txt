@@ -1,6 +1,7 @@
-# Python dependencies for the LIBERO-plus evaluation harness
-# Recommended Python: 3.10
-# See README.md for the LIBERO-plus source install and simulator assets.
+# Python dependencies for the LIBERO-plus evaluation harness (recommended: Python 3.10).
+# Note: sylvestf/LIBERO-plus is NOT published on PyPI (import name `libero`), so run:
+#   bash scripts/setup_libero_plus.sh
+# to install these packages alongside LIBERO-plus source + HuggingFace simulator assets.
 
 numpy<2.0
 mujoco==2.3.7
@@ -12,6 +13,9 @@ bddl>=1.0.1
 easydict>=1.10
 cloudpickle
 scipy>=1.10
+huggingface_hub>=0.20.0
+scikit-image
+wand
 torch
 PyYAML
 matplotlib

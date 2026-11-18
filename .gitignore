@@ -14,10 +14,11 @@ __pycache__/
 *.swp
 .vscode/
 
-# Checkpoints, datasets & secrets
+# Checkpoints, datasets, third-party simulator & secrets
 outputs/
 checkpoints/
 datasets/
+third_party/
 *.pt
 *.pth
 *.safetensors
