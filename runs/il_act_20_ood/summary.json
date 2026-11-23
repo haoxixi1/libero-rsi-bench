@@ -1,0 +1,90 @@
+{
+  "policy_id": "il_act_20",
+  "family": "il",
+  "control_mode": "osc_delta_eef",
+  "split": "sealed_ood",
+  "env_backend": "libero",
+  "perception_mode": "rgbd_projection",
+  "noise_sigma_mm": 10.0,
+  "sealed_sha256": "792b1a0dee9acd25d33a27d4ac9d10a53b8b7faa50dd3772cb1d5be591bdec9a",
+  "num_episodes": 112,
+  "success_1_0x_count": 76,
+  "success_1_5x_count": 77,
+  "sr_1_0x": 0.6785714285714286,
+  "sr_1_5x": 0.6875,
+  "mean_steps": 276.1875,
+  "mean_macro_turns": 0.0,
+  "per_task": {
+    "spatial_t0": {
+      "n": 28,
+      "sr_1_0x": 15,
+      "sr_1_5x": 16,
+      "sr_1_0x_rate": 0.5357142857142857,
+      "sr_1_5x_rate": 0.5714285714285714
+    },
+    "object_t0": {
+      "n": 28,
+      "sr_1_0x": 17,
+      "sr_1_5x": 17,
+      "sr_1_0x_rate": 0.6071428571428571,
+      "sr_1_5x_rate": 0.6071428571428571
+    },
+    "goal_t0": {
+      "n": 28,
+      "sr_1_0x": 25,
+      "sr_1_5x": 25,
+      "sr_1_0x_rate": 0.8928571428571429,
+      "sr_1_5x_rate": 0.8928571428571429
+    },
+    "long_t0": {
+      "n": 28,
+      "sr_1_0x": 19,
+      "sr_1_5x": 19,
+      "sr_1_0x_rate": 0.6785714285714286,
+      "sr_1_5x_rate": 0.6785714285714286
+    }
+  },
+  "per_ood_axis": {
+    "objects_layout": {
+      "n": 28,
+      "sr_1_0x": 21,
+      "sr_1_5x": 22,
+      "sr_1_0x_rate": 0.75,
+      "sr_1_5x_rate": 0.7857142857142857
+    },
+    "robot_init_state": {
+      "n": 28,
+      "sr_1_0x": 15,
+      "sr_1_5x": 15,
+      "sr_1_0x_rate": 0.5357142857142857,
+      "sr_1_5x_rate": 0.5357142857142857
+    },
+    "language_instruction": {
+      "n": 28,
+      "sr_1_0x": 28,
+      "sr_1_5x": 28,
+      "sr_1_0x_rate": 1.0,
+      "sr_1_5x_rate": 1.0
+    },
+    "camera_visual": {
+      "n": 28,
+      "sr_1_0x": 12,
+      "sr_1_5x": 12,
+      "sr_1_0x_rate": 0.42857142857142855,
+      "sr_1_5x_rate": 0.42857142857142855
+    }
+  },
+  "cost_ledger": {
+    "demo_count": 80,
+    "online_episodes": 112,
+    "online_env_steps": 30933,
+    "gpu_hours": 0.485,
+    "llm_unique_calls": 0,
+    "llm_total_calls": 0,
+    "prompt_tokens": 0,
+    "completion_tokens": 0,
+    "reasoning_tokens": 0,
+    "eval_wall_sec": 1194.332,
+    "total_tokens": 0
+  }
+}

@@ -18,9 +18,6 @@ if [[ "$(uname -s)" == "Linux" ]]; then
   fi
 fi
 
-# Remove original LIBERO if present so `import libero` always resolves to LIBERO-plus.
-"$PYTHON_BIN" -m pip uninstall -y libero >/dev/null 2>&1 || true
-
 echo "[2/5] Cloning sylvestf/LIBERO-plus into $LIBERO_PLUS_DIR..."
 if [[ ! -d "$LIBERO_PLUS_DIR/.git" ]]; then
   mkdir -p "$(dirname "$LIBERO_PLUS_DIR")"
@@ -30,8 +27,13 @@ else
 fi
 
 echo "[3/5] Installing Python dependencies and LIBERO-plus (editable)..."
-"$PYTHON_BIN" -m pip install -r "$REPO_ROOT/requirements-harness.txt" -r "$LIBERO_PLUS_DIR/extra_requirements.txt"
-"$PYTHON_BIN" -m pip install --no-deps -e "$LIBERO_PLUS_DIR"
+if ! "$PYTHON_BIN" -c "import mujoco, robosuite, bddl, wand, libero" >/dev/null 2>&1; then
+  "$PYTHON_BIN" -m pip uninstall -y libero >/dev/null 2>&1 || true
+  "$PYTHON_BIN" -m pip install -r "$REPO_ROOT/requirements-harness.txt" -r "$LIBERO_PLUS_DIR/extra_requirements.txt"
+  "$PYTHON_BIN" -m pip install --no-deps -e "$LIBERO_PLUS_DIR"
+else
+  echo "  -> Core LIBERO-plus Python dependencies already installed, skipping pip install."
+fi
 
 ASSETS_PARENT="$LIBERO_PLUS_DIR/libero/libero"
 echo "[4/5] Ensuring LIBERO-plus simulator assets under $ASSETS_PARENT/assets..."
@@ -52,6 +54,13 @@ zip_path = hf_hub_download(
 print(f"  -> Extracting {zip_path} to {target_parent}...")
 with zipfile.ZipFile(zip_path, "r") as zf:
     zf.extractall(target_parent)
+# Normalize nested inspire/.../assets if present in assets.zip
+for scenes_dir in target_parent.rglob("scenes"):
+    if scenes_dir.is_dir() and scenes_dir.parent.name == "assets" and scenes_dir.parent != (target_parent / "assets"):
+        import shutil
+        shutil.move(str(scenes_dir.parent), str(target_parent / "assets"))
+        shutil.rmtree(target_parent / "inspire", ignore_errors=True)
+        break
 assert (target_parent / "assets" / "scenes").is_dir(), f"Missing assets/scenes under {target_parent}"
 PY
 else

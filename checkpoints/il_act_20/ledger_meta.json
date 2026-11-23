@@ -1,0 +1,8 @@
+{
+  "policy_id": "il_act_20",
+  "demo_count": 80,
+  "gpu_hours": 0.485,
+  "best_val_loss": 0.438134,
+  "best_dev_sr": -1.0,
+  "best_checkpoint": "/root/autodl-tmp/libero-rsi-bench/checkpoints/il_act_20/best.pt"
+}

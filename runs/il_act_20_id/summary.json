@@ -1,0 +1,61 @@
+{
+  "policy_id": "il_act_20",
+  "family": "il",
+  "control_mode": "osc_delta_eef",
+  "split": "sealed_id",
+  "env_backend": "libero",
+  "perception_mode": "rgbd_projection",
+  "noise_sigma_mm": 10.0,
+  "sealed_sha256": "792b1a0dee9acd25d33a27d4ac9d10a53b8b7faa50dd3772cb1d5be591bdec9a",
+  "num_episodes": 100,
+  "success_1_0x_count": 87,
+  "success_1_5x_count": 87,
+  "sr_1_0x": 0.87,
+  "sr_1_5x": 0.87,
+  "mean_steps": 217.07,
+  "mean_macro_turns": 0.0,
+  "per_task": {
+    "spatial_t0": {
+      "n": 25,
+      "sr_1_0x": 24,
+      "sr_1_5x": 24,
+      "sr_1_0x_rate": 0.96,
+      "sr_1_5x_rate": 0.96
+    },
+    "object_t0": {
+      "n": 25,
+      "sr_1_0x": 24,
+      "sr_1_5x": 24,
+      "sr_1_0x_rate": 0.96,
+      "sr_1_5x_rate": 0.96
+    },
+    "goal_t0": {
+      "n": 25,
+      "sr_1_0x": 24,
+      "sr_1_5x": 24,
+      "sr_1_0x_rate": 0.96,
+      "sr_1_5x_rate": 0.96
+    },
+    "long_t0": {
+      "n": 25,
+      "sr_1_0x": 15,
+      "sr_1_5x": 15,
+      "sr_1_0x_rate": 0.6,
+      "sr_1_5x_rate": 0.6
+    }
+  },
+  "per_ood_axis": {},
+  "cost_ledger": {
+    "demo_count": 80,
+    "online_episodes": 100,
+    "online_env_steps": 21707,
+    "gpu_hours": 0.485,
+    "llm_unique_calls": 0,
+    "llm_total_calls": 0,
+    "prompt_tokens": 0,
+    "completion_tokens": 0,
+    "reasoning_tokens": 0,
+    "eval_wall_sec": 897.39,
+    "total_tokens": 0
+  }
+}

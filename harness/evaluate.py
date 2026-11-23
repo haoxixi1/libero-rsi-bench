@@ -250,13 +250,34 @@ def run_evaluation(
     )
 
     t0 = time.monotonic()
+    out_dir.mkdir(parents=True, exist_ok=True)
+    partial_path = out_dir / "episodes.partial.jsonl"
+    cached_by_id: dict[str, EpisodeResult] = {}
+    if partial_path.is_file():
+        for line in partial_path.read_text(encoding="utf-8").splitlines():
+            if not line.strip():
+                continue
+            try:
+                d = json.loads(line)
+                res_obj = EpisodeResult(**d)
+                cached_by_id[res_obj.episode_id] = res_obj
+            except Exception:
+                continue
+
     results: list[EpisodeResult] = []
     videos_dir = (out_dir / "videos") if save_videos else None
     keyframes_dir = (out_dir / "keyframes") if save_keyframes else None
     try:
         tasks_cfg = manifest["tasks"]
         for ep in episodes_spec:
-            v_path = (videos_dir / f"{ep['episode_id']}.mp4") if videos_dir is not None else None
+            ep_id = ep["episode_id"]
+            if ep_id in cached_by_id:
+                cached_res = cached_by_id[ep_id]
+                results.append(cached_res)
+                ledger.online_episodes += 1
+                ledger.online_env_steps += int(cached_res.steps_taken)
+                continue
+            v_path = (videos_dir / f"{ep_id}.mp4") if videos_dir is not None else None
             res = rollout_episode(
                 env,
                 policy,
@@ -267,12 +288,13 @@ def run_evaluation(
                 keyframes_dir=keyframes_dir,
             )
             results.append(res)
+            with partial_path.open("a", encoding="utf-8") as pf:
+                pf.write(json.dumps(res.to_dict(), ensure_ascii=False) + "\n")
     finally:
         env.close()
 
     ledger.eval_wall_sec = round(time.monotonic() - t0, 3)
 
-    out_dir.mkdir(parents=True, exist_ok=True)
     ep_lines = [json.dumps(r.to_dict(), ensure_ascii=False) for r in results]
     (out_dir / "episodes.jsonl").write_text("\n".join(ep_lines) + "\n", encoding="utf-8")
 

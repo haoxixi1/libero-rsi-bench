@@ -884,14 +884,14 @@ class LiberoPlusEnvAdapter(BaseEnvAdapter):
             item
             for item in tc.get(suite_name, [])
             if item.get("category") in target_cats
-            and str(item.get("name", "")).startswith(clean_base_name)
-            and int(item.get("difficulty_level", 0)) in (2, 3, 4)
+            and str(item.get("name") or "").startswith(clean_base_name)
+            and int(item.get("difficulty_level") or 0) in (2, 3, 4)
         ]
         if not candidates:
             candidates = [
                 item
                 for item in tc.get(suite_name, [])
-                if item.get("category") in target_cats and str(item.get("name", "")).startswith(clean_base_name)
+                if item.get("category") in target_cats and str(item.get("name") or "").startswith(clean_base_name)
             ]
         if not candidates:
             raise KeyError(
@@ -1210,8 +1210,10 @@ class LiberoPlusEnvAdapter(BaseEnvAdapter):
         # Never expose raw sim.data / object-state to policies
         if self.perception_mode == "rgbd_projection":
             if "agentview_depth" in raw:
-                agent_d_m = self._get_real_depth_map(self._env.sim, raw["agentview_depth"])
-                wrist_d_m = self._get_real_depth_map(self._env.sim, raw["robot0_eye_in_hand_depth"])
+                raw_ad = np.clip(np.nan_to_num(raw["agentview_depth"], nan=1.0, posinf=1.0, neginf=0.0), 0.0, 1.0)
+                raw_wd = np.clip(np.nan_to_num(raw["robot0_eye_in_hand_depth"], nan=1.0, posinf=1.0, neginf=0.0), 0.0, 1.0)
+                agent_d_m = self._get_real_depth_map(self._env.sim, raw_ad)
+                wrist_d_m = self._get_real_depth_map(self._env.sim, raw_wd)
                 obs["depth"] = {
                     "agentview": np.ascontiguousarray(agent_d_m[::-1, ::-1]).astype(np.float32),
                     "wrist": np.ascontiguousarray(wrist_d_m[::-1, ::-1]).astype(np.float32),
