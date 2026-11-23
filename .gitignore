@@ -1,22 +1,28 @@
-# Run artifacts & logs
-runs/*
-!runs/.gitkeep
+# Run artifacts & logs (keep summaries, episodes, reports, videos & filmstrips; ignore bulky frames/gifs/partials)
+logs/
+runs/*/keyframes/
+runs/*/episodes.partial.jsonl
+runs/visual_showcase_*/gifs/
 
-# Python & caches
+# Python & caches & local virtualenvs
 __pycache__/
 *.py[cod]
 *$py.class
 *.egg-info/
 .pytest_cache/
+.venv*/
+.libero_config/
 
 # OS & editor
 .DS_Store
 *.swp
 .vscode/
 
-# Checkpoints, datasets, third-party simulator & secrets
+# Checkpoints (keep training ledgers/logs only, ignore weights), datasets, third-party simulator & secrets
 outputs/
-checkpoints/
+checkpoints/*/*
+!checkpoints/*/*.json
+!checkpoints/*/*.jsonl
 datasets/
 third_party/
 *.pt

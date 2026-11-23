@@ -1,0 +1,82 @@
+[
+  {
+    "task_key": "spatial_t0",
+    "task_title": "Spatial (spatial_t0): Pick Black Bowl -> Place on Plate",
+    "instruction": "pick up the black bowl between the plate and the ramekin and place it on the plate",
+    "episode_id": "dev_000",
+    "split": "dev",
+    "ood_axis": null,
+    "success_1_0x": true,
+    "success_1_5x": true,
+    "steps_taken": 80,
+    "num_frames": 81,
+    "mp4": "videos/spatial_t0_dev_000_success.mp4",
+    "gif": "gifs/spatial_t0_dev_000_success.gif",
+    "filmstrip_6stage": "filmstrips/spatial_t0_dev_000_success_6stage.png",
+    "keyframes": [
+      "keyframes/spatial_t0_dev_000_00_start_success.png",
+      "keyframes/spatial_t0_dev_000_01_mid_success.png",
+      "keyframes/spatial_t0_dev_000_02_end_success.png"
+    ]
+  },
+  {
+    "task_key": "object_t0",
+    "task_title": "Object (object_t0): Pick Alphabet Soup -> Place in Basket",
+    "instruction": "pick up the alphabet soup and place it in the basket",
+    "episode_id": "dev_025",
+    "split": "dev",
+    "ood_axis": null,
+    "success_1_0x": true,
+    "success_1_5x": true,
+    "steps_taken": 126,
+    "num_frames": 127,
+    "mp4": "videos/object_t0_dev_025_success.mp4",
+    "gif": "gifs/object_t0_dev_025_success.gif",
+    "filmstrip_6stage": "filmstrips/object_t0_dev_025_success_6stage.png",
+    "keyframes": [
+      "keyframes/object_t0_dev_025_00_start_success.png",
+      "keyframes/object_t0_dev_025_01_mid_success.png",
+      "keyframes/object_t0_dev_025_02_end_success.png"
+    ]
+  },
+  {
+    "task_key": "goal_t0",
+    "task_title": "Goal (goal_t0): Articulate & Open Middle Cabinet Drawer",
+    "instruction": "open the middle drawer of the cabinet",
+    "episode_id": "dev_050",
+    "split": "dev",
+    "ood_axis": null,
+    "success_1_0x": true,
+    "success_1_5x": true,
+    "steps_taken": 124,
+    "num_frames": 125,
+    "mp4": "videos/goal_t0_dev_050_success.mp4",
+    "gif": "gifs/goal_t0_dev_050_success.gif",
+    "filmstrip_6stage": "filmstrips/goal_t0_dev_050_success_6stage.png",
+    "keyframes": [
+      "keyframes/goal_t0_dev_050_00_start_success.png",
+      "keyframes/goal_t0_dev_050_01_mid_success.png",
+      "keyframes/goal_t0_dev_050_02_end_success.png"
+    ]
+  },
+  {
+    "task_key": "long_t0",
+    "task_title": "Long-Horizon (long_t0): Put Both Alphabet Soup & Tomato Sauce in Basket",
+    "instruction": "put both the alphabet soup and the tomato sauce in the basket",
+    "episode_id": "dev_075",
+    "split": "dev",
+    "ood_axis": null,
+    "success_1_0x": true,
+    "success_1_5x": true,
+    "steps_taken": 256,
+    "num_frames": 257,
+    "mp4": "videos/long_t0_dev_075_success.mp4",
+    "gif": "gifs/long_t0_dev_075_success.gif",
+    "filmstrip_6stage": "filmstrips/long_t0_dev_075_success_6stage.png",
+    "keyframes": [
+      "keyframes/long_t0_dev_075_00_start_success.png",
+      "keyframes/long_t0_dev_075_01_mid_success.png",
+      "keyframes/long_t0_dev_075_02_end_success.png"
+    ]
+  }
+]

@@ -4,6 +4,7 @@
 # to install these packages alongside LIBERO-plus source + HuggingFace simulator assets.
 
 numpy<2.0
+h5py>=3.8.0
 mujoco==2.3.7
 robosuite==1.4.1
 gym==0.26.2

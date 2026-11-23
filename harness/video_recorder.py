@@ -110,6 +110,20 @@ def save_episode_keyframes(
     return saved
 
 
+def resolve_ffmpeg_bin() -> str | None:
+    """Resolve system `ffmpeg` binary or fall back to bundled `imageio_ffmpeg` executable."""
+    ffmpeg_bin = shutil.which("ffmpeg")
+    if ffmpeg_bin:
+        return ffmpeg_bin
+    try:  # pragma: no cover
+        import imageio_ffmpeg  # type: ignore[import-not-found]
+
+        exe = imageio_ffmpeg.get_ffmpeg_exe()
+        return str(exe) if exe else None
+    except Exception:
+        return None
+
+
 def write_mp4(path: Path, frames: list[Any], *, fps: int = 20) -> Path | None:
     """Encode a sequence of HxWx3 frames into an H.264 yuv420p MP4 video if supported."""
     if not frames:
@@ -121,7 +135,7 @@ def write_mp4(path: Path, frames: list[Any], *, fps: int = 20) -> Path | None:
     out_path = Path(path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
-    ffmpeg_bin = shutil.which("ffmpeg")
+    ffmpeg_bin = resolve_ffmpeg_bin()
     if ffmpeg_bin:
         cmd = [
             ffmpeg_bin,
